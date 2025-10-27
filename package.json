@@ -1,0 +1,19 @@
+{
+  "name": "contentful-demo-tooling",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "contentful:login": "npx contentful login",
+    "contentful:space:use": "npx contentful space use --space-id ${CONTENTFUL_SPACE_ID}",
+    "contentful:env:use": "npx contentful environment use --space-id ${CONTENTFUL_SPACE_ID} --environment-id ${CONTENTFUL_ENVIRONMENT:=master}",
+    "contentful:migrate": "npx contentful space migration --space-id ${CONTENTFUL_SPACE_ID} --environment-id ${CONTENTFUL_ENVIRONMENT:=master} --management-token ${CONTENTFUL_MANAGEMENT_TOKEN} --yes contentful/migrations/01-page-and-form.cjs",
+    "contentful:seed": "node scripts/contentful-seed.mjs",
+    "contentful:bootstrap": "npm run contentful:migrate && npm run contentful:seed"
+  },
+  "dependencies": {
+    "contentful-cli": "^1.15.3",
+    "contentful-management": "^11.5.1",
+    "ora": "^8.2.0"
+  }
+}

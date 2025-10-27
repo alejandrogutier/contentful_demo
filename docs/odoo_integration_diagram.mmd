@@ -1,0 +1,10 @@
+```mermaid
+flowchart LR
+  A[Editor en Contentful] -->|Publica contenido| B[Contenido publicado via CDA/CPA]
+  B -->|Webhook lead capturado| C[Next.js API route /api/leads]
+  C -->|Payload normalizado (JSON)| D[CRM Simulado]
+  D -->|Callback/Queue| E[Bus de Integración]
+  E -->|REST/GraphQL| F[Odoo API]
+  F -->|Actualiza| G[Odoo CRM / ERP]
+  E -->|Jobs programados| H[Data Warehouse / BI]
+```

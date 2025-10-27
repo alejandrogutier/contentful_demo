@@ -1,0 +1,8 @@
+.next
+node_modules
+npm-debug.log*
+.env*
+Dockerfile.local
+.git
+.DS_Store
+coverage
