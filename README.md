@@ -1,101 +1,124 @@
 # Contentful Demo – Dentsu
 
-Repositorio preparado para ejecutar un demo en vivo de Contentful que cubre creación de contenidos, flujos editoriales, multilenguaje y una integración de formularios con un CRM simulado + diagrama de integración con Odoo.
+Demo de referencia para realizar presentaciones de Contentful con frontend en Next.js y un CRM simulado que recibe los formularios de la web. Incluye tooling para provisionar el espacio, guías operativas y diagramas de integración.
 
-## Estructura
-- `demo-frontend/`: Aplicación Next.js (App Router) que consume Contentful y expone un formulario conectado al CRM simulado.
-- `scripts/mock-crm-server.js`: Servidor Node.js que persiste leads y actúa como CRM/ERP dummy.
-- `contentful/migrations/`: Scripts `contentful-migration` para provisionar modelos (**Page**, **Lead Form**, **Navigation**).
-- `docs/`: Runbook del demo y diagrama Mermaid para la integración con Odoo.
+## Componentes principales
+- `demo-frontend/`: Aplicación Next.js (App Router) que consulta Contentful y expone `/api/leads`.
+- `scripts/mock-crm-server.js`: Servicio Node que persiste leads en `scripts/tmp/leads.json`.
+- `contentful/migrations/`: Script `01-page-and-form.cjs` para crear los modelos de contenido.
+- `docs/`: Runbook del demo y diagrama de integración con Odoo.
+- `scripts/contentful-seed.mjs`: Utilidad para precargar contenido de ejemplo tras la migración.
 
-## Requisitos
-- Node.js >= 18.
-- Cuenta de Contentful con acceso a Content Management (para migraciones) y Content Delivery/Preview.
-- `contentful-cli` instalado globalmente (`npm install -g contentful-cli`).
+## Requisitos previos
+- Docker y Docker Compose v2 (principal vía de ejecución).
+- Node.js 18+ solo si deseas correr el proyecto o el tooling fuera de contenedores.
+- Espacio de Contentful con acceso a Delivery, Preview y Management API.
 
-## Variables de entorno (`demo-frontend/.env.local`)
+## Variables de entorno
+| Archivo | Uso | Campos requeridos | Comentarios |
+| --- | --- | --- | --- |
+| `demo-frontend/.env.local` | Desarrollo local | `CONTENTFUL_SPACE_ID`, `CONTENTFUL_ENVIRONMENT`, `CONTENTFUL_DELIVERY_TOKEN`, `CONTENTFUL_PREVIEW_TOKEN`, `CRM_WEBHOOK_URL` | `CRM_WEBHOOK_URL` debe apuntar al CRM que estés usando (`http://localhost:3333/leads` o el contenedor) |
+| `demo-frontend/.env.docker` | Frontend en Docker | Mismos campos + `CONTENTFUL_MANAGEMENT_TOKEN` opcional | Puedes copiar desde `.env.local` y ajustar el webhook a `http://crm:3333/leads` |
+
+> Consejo: guarda tus credenciales en un gestor seguro. Evita commitear `.env.*`.
+
+## Arranque con Docker
+1. **Configura variables**  
+   Crea `demo-frontend/.env.docker` con tus credenciales de Contentful. Ejemplo:
+   ```bash
+   CONTENTFUL_SPACE_ID=<SPACE_ID>
+   CONTENTFUL_ENVIRONMENT=master
+   CONTENTFUL_DELIVERY_TOKEN=<CDA_TOKEN>
+   CONTENTFUL_PREVIEW_TOKEN=<CPA_TOKEN>
+   CONTENTFUL_MANAGEMENT_TOKEN=<CMA_TOKEN opcional>
+   CRM_WEBHOOK_URL=http://crm:3333/leads
+   CONTENTFUL_FORCE_DEMO=false
+   ```
+2. **Construye y levanta servicios**
+   ```bash
+   WEB_PORT=3001 docker compose up --build -d
+   ```
+   - `WEB_PORT` define el puerto *host*. Usa otro (p. ej. `3001`) si `3000` está ocupado.
+3. **Verifica estado**
+   ```bash
+   docker compose ps
+   docker compose logs crm
+   docker compose logs web
+   ```
+   Espera ver:
+   - CRM: `CRM simulado escuchando en http://localhost:3333`
+   - Frontend: `✓ Ready in <ms>` tras `next start`
+4. **Chequeo rápido**
+   ```bash
+   curl http://localhost:${WEB_PORT:-3000}
+   curl http://localhost:3333/leads
+   ```
+   El primer comando debe devolver `HTTP/1.1 200 OK`; el segundo, `[]` cuando no hay leads.
+5. **Detener y limpiar**
+   ```bash
+   docker compose down
+   ```
+   Añade `-v` si necesitas eliminar el directorio `scripts/tmp`.
+
+### Comandos útiles dentro de los contenedores
 ```bash
-CONTENTFUL_SPACE_ID=xxxxx
-CONTENTFUL_ENVIRONMENT=master
-CONTENTFUL_DELIVERY_TOKEN=xxxxx
-CONTENTFUL_PREVIEW_TOKEN=xxxxx
-CRM_WEBHOOK_URL=http://localhost:3333/leads
+docker compose exec web contentful --version
+docker compose exec web contentful space use --space-id <SPACE_ID>
+docker compose exec crm ls scripts/tmp
 ```
 
-## Ejecución con Docker
+## Ejecución local sin Docker
 ```bash
-cp demo-frontend/.env.docker.example demo-frontend/.env.docker
-WEB_PORT=3001 docker compose up --build
-```
+# Terminal 1 – CRM
+node scripts/mock-crm-server.js
 
-- Frontend: http://localhost:3000 (ajusta `WEB_PORT` si necesitas otro puerto)
-- CRM simulado (persistencia en `scripts/tmp/leads.json`): http://localhost:3333/leads
-- Detener servicios: `docker compose down` (usa `-v` si deseas limpiar volúmenes)
-- El contenedor `contentful-demo-web` incluye la Contentful CLI (`contentful`). Puedes ejecutar comandos así:
-  ```bash
-  docker compose exec web contentful --version
-  docker compose exec web contentful space use --space-id <SPACE_ID>
-  ```
-
-## Puesta en marcha
-```bash
+# Terminal 2 – Next.js
 cd demo-frontend
 npm install
 npm run dev
 ```
+- Frontend en `http://localhost:3000`
+- CRM en `http://localhost:3333/leads`
 
-En otra terminal:
-```bash
-cd demo-frontend
-npm run crm
-```
+## Provisionar el espacio de Contentful
+1. Instala las dependencias del tooling (root del repo):
+   ```bash
+   npm install
+   ```
+2. Autentícate:
+   ```bash
+   npm run contentful:login
+   ```
+3. Selecciona espacio y entorno por defecto:
+   ```bash
+   CONTENTFUL_SPACE_ID=<SPACE_ID> npm run contentful:space:use
+   CONTENTFUL_SPACE_ID=<SPACE_ID> CONTENTFUL_ENVIRONMENT=master npm run contentful:env:use
+   ```
+4. Ejecuta la migración + seed (requiere `CONTENTFUL_MANAGEMENT_TOKEN`):
+   ```bash
+   CONTENTFUL_SPACE_ID=<SPACE_ID> \
+   CONTENTFUL_ENVIRONMENT=master \
+   CONTENTFUL_MANAGEMENT_TOKEN=<CMA_TOKEN> \
+   npm run contentful:bootstrap
+   ```
 
-- Frontend: http://localhost:3000
-- CRM simulado: http://localhost:3333/leads
+La migración crea los modelos **Page**, **Lead Form** y **Navigation**. El seed añade páginas multilenguaje, navegación y formularios de ejemplo listos para el demo.
 
-## Provisionar Contentful
-1. Seleccionar el espacio: `contentful space use --space-id <SPACE_ID>`.
-2. Ejecutar migraciones: `contentful migration --environment-id master contentful/migrations/01-page-and-form.cjs`.
-3. Crear roles de usuario (Editor, Revisor, Admin) y activar Workflows en el espacio.
-4. Configurar locales `es-ES` y `en-US`.
+## Escenarios de demo cubiertos
+- **Publicación multilenguaje:** rutas `/[locale]/[slug]` renderizadas con datos de Contentful.
+- **Formularios conectados:** componente `LeadForm` → API `/api/leads` → CRM simulado (persistencia en JSON).
+- **Workflows editoriales:** soporte para `workflowStage` en las páginas y guion en `docs/demo_runbook.md`.
+- **Integración con Odoo:** revisar `docs/odoo_integration_diagram.mmd` para explicar la arquitectura.
 
-## Tooling para preparar el espacio
-```bash
-# Instalar dependencias del tooling (en el root del repo)
-npm install
+## Solución de problemas
+- **Puerto 3000 ocupado:** define `WEB_PORT` al ejecutar `docker compose`.
+- **No se crean leads:** revisa `CRM_WEBHOOK_URL` y los logs del CRM; el archivo `scripts/tmp/leads.json` debe regenerarse automáticamente.
+- **Errores con Contentful CLI:** asegúrate de ejecutar los comandos dentro del contenedor `web` o de tener la CLI instalada globalmente (`npm install -g contentful-cli`).
+- **Tokens caducados:** renueva los Delivery/Preview tokens desde la UI de Contentful y actualiza las variables de entorno.
 
-# Autenticarse (abre el browser)
-npm run contentful:login
+## Recursos adicionales
+- Guion del demo: `docs/demo_runbook.md`
+- Diagrama de integración: `docs/odoo_integration_diagram.mmd`
+- Código del CRM: `scripts/mock-crm-server.js`
 
-# Indicar el space y environment por defecto
-CONTENTFUL_SPACE_ID=<SPACE_ID> npm run contentful:space:use
-CONTENTFUL_SPACE_ID=<SPACE_ID> CONTENTFUL_ENVIRONMENT=master npm run contentful:env:use
-
-# Ejecutar migración + contenido demo (requiere CONTENTFUL_MANAGEMENT_TOKEN)
-CONTENTFUL_SPACE_ID=<SPACE_ID> \
-CONTENTFUL_ENVIRONMENT=master \
-CONTENTFUL_MANAGEMENT_TOKEN=<CMA_TOKEN> \
-npm run contentful:bootstrap
-```
-
-- El comando `contentful:bootstrap` ejecuta la migración `01-page-and-form.cjs` y crea páginas, formularios y navegación de ejemplo listos para el demo.
-- Variables recomendadas: copia `.env.example` y completa `CONTENTFUL_SPACE_ID`, `CONTENTFUL_ENVIRONMENT` y `CONTENTFUL_MANAGEMENT_TOKEN` para exportarlas fácilmente.
-
-## Escenarios cubiertos
-1. **Creación y publicación de contenidos**: Page template con campos SEO y assets; renderizado en `/[locale]/[slug]`.
-2. **Formularios e integraciones**: Content model `leadForm` + componente `LeadForm` → API `/api/leads` → CRM simulado.
-3. **Multilingüismo**: i18n nativo de Next + locales de Contentful; `LocaleSwitcher` para navegar entre idiomas.
-4. **Usuarios y aprobaciones**: soporte para Workflows de Contentful y campo `workflowStage`.
-5. **Multi-sitio**: campo `site` en Page; navegación desacoplada con `navigationItem`.
-6. **Integración con Odoo**: ver `docs/odoo_integration_diagram.mmd` + explicación en `docs/demo_runbook.md`.
-
-## Cómo realizar el demo
-- Seguir el guion `docs/demo_runbook.md`.
-- Mantener visible la terminal del CRM para evidenciar la trazabilidad de leads.
-- Usar la API Preview (`CONTENTFUL_PREVIEW_TOKEN`) para enseñar cambios en modo borrador.
-- Mostrar roles y Workflows desde la UI de Contentful.
-
-## Próximos pasos sugeridos
-- Añadir autenticación (SSO) para el front de demo.
-- Incorporar automatización de traducciones vía Localize o Smartling.
-- Integrar pruebas E2E (Playwright) para validar flujo de publicación y formularios.
+¡Listo! Con Docker y las migraciones ejecutadas, deberías poder mostrar todo el flujo (creación de contenido, aprobación, publicación y recepción de leads) en cuestión de minutos.

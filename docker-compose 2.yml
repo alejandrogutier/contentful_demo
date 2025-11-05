@@ -1,0 +1,25 @@
+services:
+  crm:
+    image: node:20-alpine
+    container_name: contentful-demo-crm
+    working_dir: /app
+    command: ["node", "scripts/mock-crm-server.js"]
+    environment:
+      - CRM_PORT=3333
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./scripts/tmp:/app/scripts/tmp
+    ports:
+      - "3333:3333"
+
+  web:
+    build:
+      context: ./demo-frontend
+      dockerfile: Dockerfile
+    container_name: contentful-demo-web
+    env_file:
+      - ./demo-frontend/.env.docker
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - crm
